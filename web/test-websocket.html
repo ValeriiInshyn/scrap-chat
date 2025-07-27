@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>WebSocket Test</title>
+    <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+  </head>
+  <body>
+    <h1>WebSocket Test</h1>
+    <div id="status">Connecting...</div>
+    <div id="messages"></div>
+
+    <script>
+      const statusDiv = document.getElementById("status");
+      const messagesDiv = document.getElementById("messages");
+
+      // First, get a token by logging in
+      fetch("http://localhost:3001/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: "test@example.com",
+          password: "password123",
+        }),
+      })
+        .then((response) => response.json())
+        .then((data) => {
+          if (data.token) {
+            statusDiv.textContent = "Got token, connecting to WebSocket...";
+
+            // Connect to WebSocket
+            const socket = io("http://localhost:3001", {
+              auth: { token: data.token },
+              transports: ["websocket", "polling"],
+            });
+
+            socket.on("connect", () => {
+              statusDiv.textContent = "✅ Connected to WebSocket!";
+              statusDiv.style.color = "green";
+
+              // Join test chat
+              socket.emit("join-chat", "688672855f92a9c57d26ce45");
+              addMessage("📱 Joined test chat room");
+            });
+
+            socket.on("disconnect", () => {
+              statusDiv.textContent = "❌ Disconnected from WebSocket";
+              statusDiv.style.color = "red";
+            });
+
+            socket.on("connect_error", (error) => {
+              statusDiv.textContent =
+                "❌ WebSocket connection error: " + error.message;
+              statusDiv.style.color = "red";
+            });
+
+            socket.on("new-message", (data) => {
+              addMessage("📨 Received: " + data.message.content);
+            });
+
+            socket.on("user-typing", (data) => {
+              addMessage("⌨️ User typing: " + data.userName);
+            });
+
+            socket.on("user-stop-typing", (data) => {
+              addMessage("⏹️ User stopped typing: " + data.userName);
+            });
+
+            function addMessage(text) {
+              const div = document.createElement("div");
+              div.textContent = new Date().toLocaleTimeString() + " - " + text;
+              messagesDiv.appendChild(div);
+            }
+
+            // Test sending a message after 3 seconds
+            setTimeout(() => {
+              addMessage("📤 Sending test message...");
+              fetch(
+                "http://localhost:3001/api/chats/688672855f92a9c57d26ce45/messages",
+                {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    Authorization: "Bearer " + data.token,
+                  },
+                  body: JSON.stringify({
+                    content: "Test message from browser!",
+                  }),
+                }
+              )
+                .then((response) => response.json())
+                .then((result) => {
+                  addMessage("✅ Message sent via API: " + result.content);
+                })
+                .catch((error) => {
+                  addMessage("❌ Failed to send message: " + error.message);
+                });
+            }, 3000);
+          } else {
+            statusDiv.textContent = "❌ Failed to get token: " + data.error;
+            statusDiv.style.color = "red";
+          }
+        })
+        .catch((error) => {
+          statusDiv.textContent = "❌ Login failed: " + error.message;
+          statusDiv.style.color = "red";
+        });
+    </script>
+  </body>
+</html>

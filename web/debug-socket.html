@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Socket Debug Test</title>
+    <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 20px;
+      }
+      .log {
+        background: #f5f5f5;
+        padding: 10px;
+        margin: 10px 0;
+        border-radius: 5px;
+      }
+      .success {
+        color: green;
+      }
+      .error {
+        color: red;
+      }
+      .info {
+        color: blue;
+      }
+      button {
+        margin: 5px;
+        padding: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Socket Debug Test</h1>
+
+    <div>
+      <button onclick="login()">1. Login</button>
+      <button onclick="connectSocket()">2. Connect Socket</button>
+      <button onclick="joinChat()">3. Join Chat</button>
+      <button onclick="sendMessage()">4. Send Message</button>
+      <button onclick="clearLog()">Clear Log</button>
+    </div>
+
+    <div id="status">Ready to test...</div>
+    <div id="log"></div>
+
+    <script>
+      let token = "";
+      let socket = null;
+      let chatId = "688672855f92a9c57d26ce45"; // Test chat ID
+
+      function log(message, type = "info") {
+        const logDiv = document.getElementById("log");
+        const div = document.createElement("div");
+        div.className = `log ${type}`;
+        div.textContent = new Date().toLocaleTimeString() + " - " + message;
+        logDiv.appendChild(div);
+        console.log(message);
+      }
+
+      function clearLog() {
+        document.getElementById("log").innerHTML = "";
+      }
+
+      async function login() {
+        log("🔐 Attempting to login...");
+        try {
+          const response = await fetch("http://localhost:3001/api/auth/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              email: "test@example.com",
+              password: "password123",
+            }),
+          });
+
+          const data = await response.json();
+          if (data.token) {
+            token = data.token;
+            log("✅ Login successful, got token", "success");
+            document.getElementById("status").textContent =
+              "Logged in - Token: " + token.substring(0, 20) + "...";
+          } else {
+            log("❌ Login failed: " + data.error, "error");
+          }
+        } catch (error) {
+          log("❌ Login error: " + error.message, "error");
+        }
+      }
+
+      function connectSocket() {
+        if (!token) {
+          log("❌ No token available. Please login first.", "error");
+          return;
+        }
+
+        log("🔌 Connecting to WebSocket...");
+        socket = io("http://localhost:3001", {
+          auth: { token },
+          transports: ["websocket", "polling"],
+        });
+
+        socket.on("connect", () => {
+          log("✅ Connected to WebSocket! Socket ID: " + socket.id, "success");
+        });
+
+        socket.on("disconnect", () => {
+          log("❌ Disconnected from WebSocket", "error");
+        });
+
+        socket.on("connect_error", (error) => {
+          log("❌ WebSocket connection error: " + error.message, "error");
+        });
+
+        socket.on("new-message", (data) => {
+          log("📨 Received new message: " + data.message.content, "success");
+        });
+
+        socket.on("test-response", (data) => {
+          log("🧪 Test response: " + data.message, "success");
+        });
+      }
+
+      function joinChat() {
+        if (!socket) {
+          log("❌ No socket connection. Please connect first.", "error");
+          return;
+        }
+
+        log("📱 Joining chat: " + chatId);
+        socket.emit("join-chat", chatId);
+      }
+
+      async function sendMessage() {
+        if (!token) {
+          log("❌ No token available. Please login first.", "error");
+          return;
+        }
+
+        log("📤 Sending message via API...");
+        try {
+          const response = await fetch(
+            `http://localhost:3001/api/chats/${chatId}/messages`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: "Bearer " + token,
+              },
+              body: JSON.stringify({
+                content:
+                  "Test message from debug page at " +
+                  new Date().toLocaleTimeString(),
+              }),
+            }
+          );
+
+          const data = await response.json();
+          if (data._id) {
+            log("✅ Message sent successfully: " + data.content, "success");
+          } else {
+            log("❌ Failed to send message: " + data.error, "error");
+          }
+        } catch (error) {
+          log("❌ Send message error: " + error.message, "error");
+        }
+      }
+    </script>
+  </body>
+</html>
